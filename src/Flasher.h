@@ -40,9 +40,9 @@ public:
     virtual ~Flasher() {}
 
     void erase();
-    void write(const char* filename);
-    bool verify(const char* filename);
-    void read(const char* filename, long fsize);
+    void write(const char* filename, long offset);
+    bool verify(const char* filename, long offset);
+    void read(const char* filename, long offset, long fsize);
     void lock(std::string& regionArg, bool enable);
     void info(Samba& samba);
 

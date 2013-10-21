@@ -50,9 +50,11 @@ public:
     bool info;
     bool debug;
     bool help;
+    bool offset;
 
     int readArg;
     string portArg;
+    int offsetArg;
     int bootArg;
     int bodArg;
     int borArg;
@@ -74,11 +76,13 @@ BossaConfig::BossaConfig()
     security = false;
     info = false;
     help = false;
+    offset = false;
 
     readArg = 0;
     bootArg = 1;
     bodArg = 1;
     borArg = 1;
+    offsetArg = 0;
 }
 
 static BossaConfig config;
@@ -105,6 +109,12 @@ static Option opts[] =
       'v', "verify", &config.verify,
       { ArgNone },
       "verify FILE matches flash contents"
+    },
+    {
+      'o', "offset", &config.offset,
+      { ArgRequired, ArgInt, "OFFSET", { &config.offsetArg } },
+      "Work with flash starting from offset OFFSET.\n"
+      "Option applies to read, write & verify commands."
     },
     {
       'p', "port", &config.port,
@@ -283,6 +293,12 @@ main(int argc, char* argv[])
             fprintf(stderr, "Flash for chip ID %08x is not supported\n", chipId);
             return 1;
         }
+        uint32_t pageSize = flash.get()->pageSize();
+        if (config.offsetArg && config.offsetArg % pageSize)
+        {
+          fprintf(stderr, "Flash offset must be a multiple of the page size (0x%04x)", pageSize);
+            return 1;
+        }
 
         Flasher flasher(flash);
 
@@ -293,14 +309,14 @@ main(int argc, char* argv[])
             flasher.erase();
 
         if (config.write)
-            flasher.write(argv[args]);
+            flasher.write(argv[args], config.offsetArg);
 
         if (config.verify)
-            if  (!flasher.verify(argv[args]))
+            if  (!flasher.verify(argv[args], config.offsetArg))
                 return 2;
 
         if (config.read)
-            flasher.read(argv[args], config.readArg);
+          flasher.read(argv[args], config.offsetArg, config.readArg);
 
         if (config.boot)
         {

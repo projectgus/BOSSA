@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-
+#include <assert.h>
 #include "Flasher.h"
 
 using namespace std;
@@ -57,12 +57,13 @@ Flasher::erase()
 }
 
 void
-Flasher::write(const char* filename)
+Flasher::write(const char* filename, long offset)
 {
     FILE* infile;
     uint32_t pageSize = _flash->pageSize();
     uint8_t buffer[pageSize];
     uint32_t pageNum = 0;
+    uint32_t pageOffset;
     uint32_t numPages;
     long fsize;
     size_t fbytes;
@@ -70,6 +71,9 @@ Flasher::write(const char* filename)
     infile = fopen(filename, "rb");
     if (!infile)
         throw FileOpenError(errno);
+
+    assert(offset % pageSize == 0);
+    pageOffset = offset / pageSize;
 
     try
     {
@@ -79,10 +83,10 @@ Flasher::write(const char* filename)
         rewind(infile);
 
         numPages = (fsize + pageSize - 1) / pageSize;
-        if (numPages > _flash->numPages())
+        if (numPages + pageOffset > _flash->numPages())
             throw FileSizeError();
 
-        printf("Write %ld bytes to flash\n", fsize);
+        printf("Write %ld bytes to flash starting from flash offset 0x%lx\n", fsize, offset);
 
         while ((fbytes = fread(buffer, 1, pageSize, infile)) > 0)
         {
@@ -90,7 +94,7 @@ Flasher::write(const char* filename)
                 progressBar(pageNum, numPages);
 
             _flash->loadBuffer(buffer);
-            _flash->writePage(pageNum);
+            _flash->writePage(pageNum+pageOffset);
 
             pageNum++;
             if (pageNum == numPages || fbytes != pageSize)
@@ -110,13 +114,14 @@ Flasher::write(const char* filename)
 }
 
 bool
-Flasher::verify(const char* filename)
+Flasher::verify(const char* filename, long offset)
 {
     FILE* infile;
     uint32_t pageSize = _flash->pageSize();
     uint8_t bufferA[pageSize];
     uint8_t bufferB[pageSize];
     uint32_t pageNum = 0;
+    uint32_t pageOffset;
     uint32_t numPages;
     uint32_t byteErrors = 0;
     uint32_t pageErrors = 0;
@@ -128,6 +133,9 @@ Flasher::verify(const char* filename)
     if (!infile)
         throw FileOpenError(errno);
 
+    assert(offset % pageSize == 0);
+    pageOffset = offset / pageSize;
+
     try
     {
         if (fseek(infile, 0, SEEK_END) != 0 ||
@@ -136,17 +144,17 @@ Flasher::verify(const char* filename)
         rewind(infile);
 
         numPages = (fsize + pageSize - 1) / pageSize;
-        if (numPages > _flash->numPages())
+        if (numPages + pageOffset > _flash->numPages())
             throw FileSizeError();
 
-        printf("Verify %ld bytes of flash\n", fsize);
+        printf("Verify %ld bytes of flash starting from flash offset 0x%lx\n", fsize, offset);
 
         while ((fbytes = fread(bufferA, 1, pageSize, infile)) > 0)
         {
             if (pageNum % 10 == 0)
                 progressBar(pageNum, numPages);
 
-            _flash->readPage(pageNum, bufferB);
+            _flash->readPage(pageNum+pageOffset, bufferB);
 
             for (uint32_t i = 0; i < fbytes; i++)
             {
@@ -188,17 +196,21 @@ Flasher::verify(const char* filename)
 }
 
 void
-Flasher::read(const char* filename, long fsize)
+Flasher::read(const char* filename, long offset, long fsize)
 {
     FILE* outfile;
     uint32_t pageSize = _flash->pageSize();
     uint8_t buffer[pageSize];
     uint32_t pageNum = 0;
+    uint32_t pageOffset;
     uint32_t numPages;
     size_t fbytes;
 
+    assert(offset % pageSize == 0);
+    pageOffset = offset / pageSize;
+
     if (fsize == 0)
-        fsize = pageSize * _flash->numPages();
+      fsize = pageSize * (_flash->numPages() - pageOffset);
 
     outfile = fopen(filename, "wb");
     if (!outfile)
@@ -207,17 +219,17 @@ Flasher::read(const char* filename, long fsize)
     try
     {
         numPages = (fsize + pageSize - 1) / pageSize;
-        if (numPages > _flash->numPages())
+        if (numPages + pageOffset > _flash->numPages())
             throw FileSizeError();
 
-        printf("Read %ld bytes from flash\n", fsize);
+        printf("Read %ld bytes from flash starting from offset 0x%lx\n", fsize, offset);
 
         for (pageNum = 0; pageNum < numPages; pageNum++)
         {
             if (pageNum % 10 == 0)
                 progressBar(pageNum, numPages);
 
-            _flash->readPage(pageNum, buffer);
+            _flash->readPage(pageNum+pageOffset, buffer);
 
             if (pageNum == numPages - 1 && fsize % pageSize > 0)
                 pageSize = fsize % pageSize;

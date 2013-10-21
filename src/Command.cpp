@@ -1102,7 +1102,7 @@ CommandRead::invoke(char* argv[], int argc)
         !flashable())
         return;
 
-    _flasher.read(argv[1], count);
+    _flasher.read(argv[1], 0, count);
 }
 
 CommandScan::CommandScan() :
@@ -1192,7 +1192,7 @@ CommandVerify::invoke(char* argv[], int argc)
         !flashable())
         return;
 
-    _flasher.verify(argv[1]);
+    _flasher.verify(argv[1], 0);
 }
 
 CommandWrite::CommandWrite() :
@@ -1209,5 +1209,5 @@ CommandWrite::invoke(char* argv[], int argc)
         !flashable())
         return;
 
-    _flasher.write(argv[1]);
+    _flasher.write(argv[1], 0);
 }
