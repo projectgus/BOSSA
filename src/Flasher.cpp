@@ -148,7 +148,6 @@ Flasher::verify(const char* filename)
 
             _flash->readPage(pageNum, bufferB);
 
-            byteErrors = 0;
             for (uint32_t i = 0; i < fbytes; i++)
             {
                 if (bufferA[i] != bufferB[i])
