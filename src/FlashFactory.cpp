@@ -31,7 +31,7 @@ FlashFactory::~FlashFactory()
 }
 
 Flash::Ptr
-FlashFactory::create(Samba& samba, uint32_t chipId)
+FlashFactory::create(Samba& samba, uint32_t chipId, bool user_page)
 {
     Flash* flash;
 
@@ -100,14 +100,23 @@ FlashFactory::create(Samba& samba, uint32_t chipId)
     // SAM4LS (ATSAM4LSxA-C)
     //
     case 0x2B0B0AE0: // ATSAM4LS8C (Rev A) ATSAM4LS 512K/64K
-      flash = new FlashCalW(samba, "ATSAM4LS8", 0, 1024, 512, 16, 0x4000, 0x20001000, 0x20004000, 0x400a0000, false);
-        break;
+      if(user_page)
+        flash = new FlashCalWUserPage(samba, "ATSAM4LS8 User Page", 0x00800000, 1, 512, 0x20001000, 0x20004000, 0x400a0000);
+      else
+        flash = new FlashCalW(samba, "ATSAM4LS8", 0, 1024, 512, 16, 0x4000, 0x20001000, 0x20004000, 0x400a0000, false);
+      break;
     case 0x2B0A09E0: // ATSAM4LS4C (Rev A) ATSAM4LS 256K/32K
-      flash = new FlashCalW(samba, "ATSAM4LS4", 0, 512, 512, 16, 0x4000, 0x20001000, 0x20004000, 0x400a0000, false);
-        break;
+      if(user_page)
+        flash = new FlashCalWUserPage(samba, "ATSAM4LS4 User Page", 0x00800000, 1, 512, 0x20001000, 0x20004000, 0x400a0000);
+      else
+        flash = new FlashCalW(samba, "ATSAM4LS4", 0, 512, 512, 16, 0x4000, 0x20001000, 0x20004000, 0x400a0000, false);
+      break;
     case 0x2B0A07E0: // ATSAM4LS2C (Rev A) ATSAM4LS 128K/32K
-      flash = new FlashCalW(samba, "ATSAM4LS2", 0, 256, 512, 16, 0x4000, 0x20001000, 0x20004000, 0x400a0000, false);
-        break;
+      if(user_page)
+        flash = new FlashCalWUserPage(samba, "ATSAM4LS2 User Page", 0x00800000, 1, 512, 0x20001000, 0x20004000, 0x400a0000);
+      else
+        flash = new FlashCalW(samba, "ATSAM4LS2", 0, 256, 512, 16, 0x4000, 0x20001000, 0x20004000, 0x400a0000, false);
+      break;
     //
     // SAM4S
     //

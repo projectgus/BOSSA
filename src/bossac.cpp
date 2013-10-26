@@ -51,6 +51,7 @@ public:
     bool debug;
     bool help;
     bool offset;
+    bool userpage;
 
     int readArg;
     string portArg;
@@ -77,6 +78,7 @@ BossaConfig::BossaConfig()
     info = false;
     help = false;
     offset = false;
+    userpage = false;
 
     readArg = 0;
     bootArg = 1;
@@ -115,6 +117,11 @@ static Option opts[] =
       { ArgRequired, ArgInt, "OFFSET", { &config.offsetArg } },
       "Work with flash starting from offset OFFSET.\n"
       "Option applies to read, write & verify commands."
+    },
+    {
+      'g', "userpage", &config.userpage,
+      { ArgNone },
+      "Address the flash user page, not the main flash space."
     },
     {
       'p', "port", &config.port,
@@ -287,7 +294,7 @@ main(int argc, char* argv[])
         }
 
         uint32_t chipId = samba.chipId();
-        Flash::Ptr flash = flashFactory.create(samba, chipId);
+        Flash::Ptr flash = flashFactory.create(samba, chipId, config.userpage);
         if (flash.get() == NULL)
         {
             fprintf(stderr, "Flash for chip ID %08x is not supported\n", chipId);

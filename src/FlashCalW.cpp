@@ -45,6 +45,8 @@
 #define CMD_ERASEALL   0x06
 #define CMD_SSB        0x09 // Set Security Fuses
 
+#define CMD_WUP        0x0D // Write user page
+#define CMD_EUP        0x0E // Erase user page
 
 FlashCalW::FlashCalW(Samba& samba,
                      const std::string& name,
@@ -189,6 +191,17 @@ FlashCalW::setBootFlash(bool enable)
   // Not implemented on ATSAM4L
 }
 
+uint32_t
+FlashCalW::getWritePageCommand()
+{
+  return CMD_WP;
+}
+
+uint32_t FlashCalW::getErasePageCommand()
+{
+  return CMD_EP;
+}
+
 void
 FlashCalW::writePage(uint32_t page)
 {
@@ -200,7 +213,7 @@ FlashCalW::writePage(uint32_t page)
 
     if(_eraseAuto) {
       waitFSR();
-      writeFCMD(CMD_EP, page);
+      writeFCMD(getErasePageCommand(), page);
     }
 
     waitFSR();
@@ -213,7 +226,7 @@ FlashCalW::writePage(uint32_t page)
     _wordCopy.runv();
 
     waitFSR();
-    writeFCMD(CMD_WP, page);
+    writeFCMD(getWritePageCommand(), page);
 }
 
 void
@@ -261,4 +274,67 @@ FlashCalW::writeFCMD(uint8_t cmd, uint16_t page)
 uint32_t FlashCalW::readFSR()
 {
   return _samba.readWord(CALW_FSR);
+}
+
+
+/* FlashCalWUserPage */
+
+FlashCalWUserPage::FlashCalWUserPage(Samba& samba,
+                  const std::string& name,
+                  uint32_t addr,
+                  uint32_t pages,
+                  uint32_t size,
+                  uint32_t user,
+                  uint32_t stack,
+                  uint32_t regs) :
+  FlashCalW(samba, name, addr, pages, size, 0, 0, user, stack, regs, false)
+{
+
+}
+
+FlashCalWUserPage::~FlashCalWUserPage()
+{
+
+}
+
+
+void
+FlashCalWUserPage::eraseAll()
+{
+  // User page is only one page, so we just erase it
+  waitFSR();
+  writeFCMD(CMD_EUP, 0);
+}
+
+bool
+FlashCalWUserPage::isLocked()
+{
+  return false;
+}
+
+bool
+FlashCalWUserPage::getLockRegion(uint32_t region)
+{
+  if (region >= 0)
+    throw FlashRegionError();
+  return false;
+}
+
+void
+FlashCalWUserPage::setLockRegion(uint32_t region, bool enable)
+{
+  throw FlashRegionError();
+}
+
+uint32_t
+FlashCalWUserPage::getWritePageCommand()
+{
+  return CMD_WUP;
+}
+
+
+uint32_t
+FlashCalWUserPage::getErasePageCommand()
+{
+  return CMD_EUP;
 }

@@ -41,12 +41,12 @@ public:
               bool canBrownout);
     virtual ~FlashCalW();
 
-    void eraseAll();
-    void eraseAuto(bool enable);
+    virtual void eraseAll();
+    virtual void eraseAuto(bool enable);
 
-    bool isLocked();
-    bool getLockRegion(uint32_t region);
-    void setLockRegion(uint32_t region, bool enable);
+    virtual bool isLocked();
+    virtual bool getLockRegion(uint32_t region);
+    virtual void setLockRegion(uint32_t region, bool enable);
 
     bool getSecurity();
     void setSecurity();
@@ -66,15 +66,43 @@ public:
     void writePage(uint32_t page);
     void readPage(uint32_t page, uint8_t* data);
 
+protected:
+    void waitFSR();
+    void writeFCMD(uint8_t cmd, uint16_t page);
 private:
     uint32_t _regs;
     bool _canBrownout;
     bool _eraseAuto;
     uint32_t _reservedPages;
 
-    void waitFSR();
-    void writeFCMD(uint8_t cmd, uint16_t page);
+    virtual uint32_t getWritePageCommand();
+    virtual uint32_t getErasePageCommand();
+
     uint32_t readFSR();
 };
+
+class FlashCalWUserPage : public FlashCalW
+{
+public:
+    FlashCalWUserPage(Samba& samba,
+              const std::string& name,
+              uint32_t addr,
+              uint32_t pages,
+              uint32_t size,
+              uint32_t user,
+              uint32_t stack,
+              uint32_t regs);
+    ~FlashCalWUserPage();
+
+    void eraseAll();
+
+    bool isLocked();
+    bool getLockRegion(uint32_t region);
+    void setLockRegion(uint32_t region, bool enable);
+ private:
+    uint32_t getWritePageCommand();
+    uint32_t getErasePageCommand();
+};
+
 
 #endif // _FLASHCALW_H
