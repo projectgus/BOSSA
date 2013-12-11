@@ -52,6 +52,7 @@ public:
     bool help;
     bool offset;
     bool userpage;
+    bool applyAll;
 
     int readArg;
     string portArg;
@@ -79,6 +80,7 @@ BossaConfig::BossaConfig()
     help = false;
     offset = false;
     userpage = false;
+    applyAll = false;
 
     readArg = 0;
     bootArg = 1;
@@ -128,6 +130,11 @@ static Option opts[] =
       { ArgRequired, ArgString, "PORT", { &config.portArg } },
       "use serial PORT to communicate to device;\n"
       "default behavior is to auto-scan all serial ports"
+    },
+    {
+      'a', "apply-all", &config.applyAll,
+      { ArgNone },
+      "Apply the operation to all devices found with auto-scan (incompatible with -p.)"
     },
     {
       'b', "boot", &config.boot,
@@ -183,19 +190,32 @@ static Option opts[] =
 };
 
 bool
-autoScan(Samba& samba, PortFactory& portFactory, string& port)
+tryConnect(Samba& samba, PortFactory& portFactory, string &port)
 {
-    for (port = portFactory.begin();
-         port != portFactory.end();
-         port = portFactory.next())
+    if (config.debug)
+        printf("Trying to connect on %s\n", port.c_str());
+    return samba.connect(portFactory.create(port));
+}
+
+bool
+scanNextPort(Samba& samba, PortFactory& portFactory, string& port)
+{
+    while((port = portFactory.next()) != portFactory.end())
     {
-        if (config.debug)
-            printf("Trying to connect on %s\n", port.c_str());
-        if (samba.connect(portFactory.create(port)))
+        if(tryConnect(samba, portFactory, port))
             return true;
     }
-
     return false;
+}
+
+
+bool
+autoScan(Samba& samba, PortFactory& portFactory, string& port)
+{
+    port = portFactory.begin();
+    if(tryConnect(samba, portFactory, port))
+        return true;
+    return scanNextPort(samba, portFactory, port);
 }
 
 int
@@ -204,6 +224,8 @@ help(const char* program)
     fprintf(stderr, "Try '%s -h' or '%s --help' for more information\n", program, program);
     return 1;
 }
+
+int apply_operations(Samba& samba, char* filename);
 
 int
 main(int argc, char* argv[])
@@ -268,10 +290,15 @@ main(int argc, char* argv[])
     {
         Samba samba;
         PortFactory portFactory;
-        FlashFactory flashFactory;
 
         if (config.debug)
             samba.setDebug(true);
+
+        if(config.port && config.applyAll)
+        {
+          fprintf(stderr, "Options --port (-p) and --apply-all (-a) are mutually exclusive\n");
+          return 1;
+        }
 
         if (config.port)
         {
@@ -280,10 +307,13 @@ main(int argc, char* argv[])
                 fprintf(stderr, "No device found on %s\n", config.portArg.c_str());
                 return 1;
             }
+            return apply_operations(samba, argv[args]);
+
         }
         else
         {
             string port;
+            int res;
             if (!autoScan(samba, portFactory, port))
             {
                 fprintf(stderr, "Auto scan for device failed\n");
@@ -291,69 +321,30 @@ main(int argc, char* argv[])
                 return 1;
             }
             printf("Device found on %s\n", port.c_str());
+            res = apply_operations(samba, argv[args]);
+            if(res || !config.applyAll)
+            {
+                return res;
+            }
+            else
+            {
+                // Iterate through all remaining ports
+                int device_count = 1;
+                while(scanNextPort(samba, portFactory, port))
+                {
+                    printf("Device found on %s\n", port.c_str());
+                    res = apply_operations(samba, argv[args]);
+                    if(res)
+                    {
+                        printf("Error after %d successful operations\n", device_count);
+                        return res;
+                    }
+                    device_count++;
+                }
+                printf("Successfully applied to %d devices\n", device_count);
+                return 0;
+            }
         }
-
-        uint32_t chipId = samba.chipId();
-        Flash::Ptr flash = flashFactory.create(samba, chipId, config.userpage);
-        if (flash.get() == NULL)
-        {
-            fprintf(stderr, "Flash for chip ID %08x is not supported\n", chipId);
-            return 1;
-        }
-        uint32_t pageSize = flash.get()->pageSize();
-        if (config.offsetArg && config.offsetArg % pageSize)
-        {
-          fprintf(stderr, "Flash offset must be a multiple of the page size (0x%04x)", pageSize);
-            return 1;
-        }
-
-        Flasher flasher(flash);
-
-        if (config.unlock)
-            flasher.lock(config.unlockArg, false);
-
-        if (config.erase)
-            flasher.erase();
-
-        if (config.write)
-            flasher.write(argv[args], config.offsetArg);
-
-        if (config.verify)
-            if  (!flasher.verify(argv[args], config.offsetArg))
-                return 2;
-
-        if (config.read)
-          flasher.read(argv[args], config.offsetArg, config.readArg);
-
-        if (config.boot)
-        {
-            printf("Set boot flash %s\n", config.bootArg ? "true" : "false");
-            flash->setBootFlash(config.bootArg);
-        }
-
-        if (config.bod)
-        {
-            printf("Set brownout detect %s\n", config.bodArg ? "true" : "false");
-            flash->setBod(config.bodArg);
-        }
-
-        if (config.bor)
-        {
-            printf("Set brownout reset %s\n", config.borArg ? "true" : "false");
-            flash->setBor(config.borArg);
-        }
-
-        if (config.security)
-        {
-            printf("Set security\n");
-            flash->setSecurity();
-        }
-
-        if (config.lock)
-            flasher.lock(config.lockArg, true);
-
-        if (config.info)
-            flasher.info(samba);
     }
     catch (exception& e)
     {
@@ -369,3 +360,69 @@ main(int argc, char* argv[])
     return 0;
 }
 
+int apply_operations(Samba &samba, char* filename)
+{
+    FlashFactory flashFactory;
+    uint32_t chipId = samba.chipId();
+    Flash::Ptr flash = flashFactory.create(samba, chipId, config.userpage);
+    if (flash.get() == NULL)
+    {
+        fprintf(stderr, "Flash for chip ID %08x is not supported\n", chipId);
+        return 1;
+    }
+    uint32_t pageSize = flash.get()->pageSize();
+    if (config.offsetArg && config.offsetArg % pageSize)
+    {
+        fprintf(stderr, "Flash offset must be a multiple of the page size (0x%04x)", pageSize);
+        return 1;
+    }
+
+    Flasher flasher(flash);
+
+    if (config.unlock)
+        flasher.lock(config.unlockArg, false);
+
+    if (config.erase)
+        flasher.erase();
+
+    if (config.write)
+        flasher.write(filename, config.offsetArg);
+
+    if (config.verify)
+        if  (!flasher.verify(filename, config.offsetArg))
+            return 2;
+
+    if (config.read)
+        flasher.read(filename, config.offsetArg, config.readArg);
+
+    if (config.boot)
+    {
+        printf("Set boot flash %s\n", config.bootArg ? "true" : "false");
+        flash->setBootFlash(config.bootArg);
+    }
+
+    if (config.bod)
+    {
+        printf("Set brownout detect %s\n", config.bodArg ? "true" : "false");
+        flash->setBod(config.bodArg);
+    }
+
+    if (config.bor)
+    {
+            printf("Set brownout reset %s\n", config.borArg ? "true" : "false");
+            flash->setBor(config.borArg);
+    }
+
+    if (config.security)
+    {
+        printf("Set security\n");
+        flash->setSecurity();
+    }
+
+    if (config.lock)
+        flasher.lock(config.lockArg, true);
+
+    if (config.info)
+        flasher.info(samba);
+    return 0;
+}
